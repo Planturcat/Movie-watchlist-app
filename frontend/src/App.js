@@ -1,25 +1,37 @@
-import logo from './logo.svg';
+import React, { useState } from 'react';
+import Home from './pages/Home';
+import Watchlist from './pages/WatchList';
 import './App.css';
-
+import './styles/components.css';
 function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
-}
+const [currentPage, setCurrentPage] = useState('home');
+return (
+<div className="App">
+<nav className="navbar">
+<div className="nav-brand">
+<h2>
+  🎬 Movie Watchlist</h2>
 
-export default App;
+</div>
+<div className="nav-links">
+<button
+onClick={() => setCurrentPage('home')}
+className={`nav-link ${currentPage === 'home' ? 'active' : ''}`}
+>
+Search Movies
+</button>
+<button
+onClick={() => setCurrentPage('watchlist')}
+className={`nav-link ${currentPage === 'watchlist' ? 'active' : ''}`}
+>
+My Watchlist
+</button>
+</div>
+</nav>
+<main className="main-content">
+{currentPage === 'home' ? <Home /> : <Watchlist />}
+</main>
+</div>
+);
+}
+  export default App;
