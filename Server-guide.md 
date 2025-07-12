@@ -1,0 +1,380 @@
+# Backend Setup Guide - Movie Watchlist
+
+## Step 1: Configure package.json
+
+First, let's set up your `package.json` with the right scripts and dependencies:
+
+```json
+{
+  "name": "movie-watchlist-backend",
+  "version": "1.0.0",
+  "description": "Backend for movie watchlist app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+```
+
+## Step 2: Environment Variables (.env)
+
+Create your `.env` file with these variables:
+
+```env
+PORT=5000
+OMDB_API_KEY=your_api_key_here
+NODE_ENV=development
+```
+
+**Important**: Get your free API key from [OMDB API](http://www.omdbapi.com/apikey.aspx)
+
+## Step 3: Create server.js (Main Server File)
+
+```javascript
+const express = require('express');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const movieRoutes = require('./routes');
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Routes
+app.use('/api', movieRoutes);
+
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ message: 'Movie Watchlist API is running!' });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+```
+
+## Step 4: Create routes.js (API Routes)
+
+```javascript
+const express = require('express');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+const router = express.Router();
+
+// Path to our JSON data file
+const DATA_FILE = path.join(__dirname, 'data', 'watchlist.json');
+
+// Helper function to read watchlist data
+const readWatchlist = () => {
+  try {
+    if (!fs.existsSync(DATA_FILE)) {
+      return [];
+    }
+    const data = fs.readFileSync(DATA_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading watchlist:', error);
+    return [];
+  }
+};
+
+// Helper function to write watchlist data
+const writeWatchlist = (data) => {
+  try {
+    // Ensure data directory exists
+    const dataDir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Error writing watchlist:', error);
+    return false;
+  }
+};
+
+// Generate unique ID for watchlist items
+const generateId = () => {
+  return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+};
+
+// ROUTE 1: Search movies using OMDB API
+router.get('/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+
+    const apiKey = process.env.OMDB_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'OMDB API key not configured' });
+    }
+
+    const response = await axios.get(`http://www.omdbapi.com/`, {
+      params: {
+        apikey: apiKey,
+        s: q, // 's' parameter for search
+        type: 'movie'
+      }
+    });
+
+    if (response.data.Response === 'False') {
+      return res.json({ movies: [], message: response.data.Error });
+    }
+
+    res.json({ movies: response.data.Search || [] });
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({ error: 'Failed to search movies' });
+  }
+});
+
+// ROUTE 2: Get movie details by IMDB ID
+router.get('/movie/:imdbId', async (req, res) => {
+  try {
+    const { imdbId } = req.params;
+    const apiKey = process.env.OMDB_API_KEY;
+
+    const response = await axios.get(`http://www.omdbapi.com/`, {
+      params: {
+        apikey: apiKey,
+        i: imdbId, // 'i' parameter for IMDB ID
+        plot: 'full'
+      }
+    });
+
+    if (response.data.Response === 'False') {
+      return res.status(404).json({ error: response.data.Error });
+    }
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Movie details error:', error);
+    res.status(500).json({ error: 'Failed to get movie details' });
+  }
+});
+
+// ROUTE 3: Get user's watchlist
+router.get('/watchlist', (req, res) => {
+  try {
+    const watchlist = readWatchlist();
+    res.json(watchlist);
+  } catch (error) {
+    console.error('Get watchlist error:', error);
+    res.status(500).json({ error: 'Failed to get watchlist' });
+  }
+});
+
+// ROUTE 4: Add movie to watchlist
+router.post('/watchlist', (req, res) => {
+  try {
+    const { imdbID, title, year, poster, plot } = req.body;
+
+    // Validate required fields
+    if (!imdbID || !title) {
+      return res.status(400).json({ error: 'imdbID and title are required' });
+    }
+
+    const watchlist = readWatchlist();
+    
+    // Check if movie already exists in watchlist
+    const existingMovie = watchlist.find(movie => movie.imdbID === imdbID);
+    if (existingMovie) {
+      return res.status(400).json({ error: 'Movie already in watchlist' });
+    }
+
+    // Create new watchlist item
+    const newMovie = {
+      id: generateId(),
+      imdbID,
+      title,
+      year,
+      poster,
+      plot,
+      watched: false,
+      rating: null,
+      dateAdded: new Date().toISOString()
+    };
+
+    watchlist.push(newMovie);
+    
+    if (writeWatchlist(watchlist)) {
+      res.status(201).json(newMovie);
+    } else {
+      res.status(500).json({ error: 'Failed to save movie to watchlist' });
+    }
+  } catch (error) {
+    console.error('Add to watchlist error:', error);
+    res.status(500).json({ error: 'Failed to add movie to watchlist' });
+  }
+});
+
+// ROUTE 5: Update movie in watchlist (mark as watched, add rating)
+router.put('/watchlist/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { watched, rating } = req.body;
+
+    const watchlist = readWatchlist();
+    const movieIndex = watchlist.findIndex(movie => movie.id === id);
+
+    if (movieIndex === -1) {
+      return res.status(404).json({ error: 'Movie not found in watchlist' });
+    }
+
+    // Update movie properties
+    if (typeof watched === 'boolean') {
+      watchlist[movieIndex].watched = watched;
+    }
+    
+    if (rating !== undefined) {
+      watchlist[movieIndex].rating = rating;
+    }
+
+    if (writeWatchlist(watchlist)) {
+      res.json(watchlist[movieIndex]);
+    } else {
+      res.status(500).json({ error: 'Failed to update movie' });
+    }
+  } catch (error) {
+    console.error('Update watchlist error:', error);
+    res.status(500).json({ error: 'Failed to update movie' });
+  }
+});
+
+// ROUTE 6: Remove movie from watchlist
+router.delete('/watchlist/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const watchlist = readWatchlist();
+    
+    const movieIndex = watchlist.findIndex(movie => movie.id === id);
+    if (movieIndex === -1) {
+      return res.status(404).json({ error: 'Movie not found in watchlist' });
+    }
+
+    const removedMovie = watchlist.splice(movieIndex, 1)[0];
+    
+    if (writeWatchlist(watchlist)) {
+      res.json({ message: 'Movie removed from watchlist', movie: removedMovie });
+    } else {
+      res.status(500).json({ error: 'Failed to remove movie from watchlist' });
+    }
+  } catch (error) {
+    console.error('Remove from watchlist error:', error);
+    res.status(500).json({ error: 'Failed to remove movie from watchlist' });
+  }
+});
+
+module.exports = router;
+```
+
+## Step 5: Create data/watchlist.json (Initial Data File)
+
+Create a `data` folder and add `watchlist.json`:
+
+```json
+[]
+```
+
+## Step 6: Testing Your Backend
+
+### Install dependencies first:
+```bash
+npm install
+```
+
+### Start the server:
+```bash
+npm run dev
+```
+
+### Test the endpoints:
+
+**1. Health Check:**
+```bash
+curl http://localhost:5000/
+```
+
+**2. Search Movies:**
+```bash
+curl "http://localhost:5000/api/search?q=batman"
+```
+
+**3. Get Watchlist:**
+```bash
+curl http://localhost:5000/api/watchlist
+```
+
+**4. Add Movie to Watchlist:**
+```bash
+curl -X POST http://localhost:5000/api/watchlist \
+  -H "Content-Type: application/json" \
+  -d '{
+    "imdbID": "tt0372784",
+    "title": "Batman Begins",
+    "year": "2005",
+    "poster": "https://example.com/poster.jpg",
+    "plot": "After training with his mentor..."
+  }'
+```
+
+## Key Code Concepts Explained:
+
+### 1. **Express Router**
+- `router.get()`, `router.post()`, etc. define our API endpoints
+- Each route handler gets `req` (request) and `res` (response) objects
+
+### 2. **File System Operations**
+- `fs.readFileSync()` and `fs.writeFileSync()` for JSON file storage
+- Always wrap in try-catch blocks for error handling
+
+### 3. **Axios for API Calls**
+- `axios.get()` makes HTTP requests to OMDB API
+- Use `params` object for query parameters
+
+### 4. **Error Handling**
+- Always validate input data
+- Return appropriate HTTP status codes
+- Use try-catch blocks for all operations
+
+### 5. **Data Validation**
+- Check required fields before processing
+- Validate data types (boolean, string, etc.)
+- Handle edge cases (empty results, missing API key)
+
+## Next Steps:
+1. Test all endpoints with curl or Postman
+2. Make sure your OMDB API key is working
+3. Verify the JSON file is being created and updated
+4. Ready to move to frontend integration!
+
+Your backend is now ready! Let me know if you encounter any errors or need clarification on any part.
