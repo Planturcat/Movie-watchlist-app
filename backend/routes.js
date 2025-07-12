@@ -66,7 +66,16 @@ router.get('/search', async (req, res) => {
         return res.json({movies: [], message: response.data.Error});
     }
 
-    res.json({movies: response.data.Search || []});
+    // Map OMDb API properties to lowercase for frontend consistency
+    const normalizedMovies = (response.data.Search || []).map(movie => ({
+        id: movie.imdbID,
+        title: movie.Title,
+        year: movie.Year,
+        poster: movie.Poster,
+        imdbID: movie.imdbID
+    }));
+
+    res.json({movies: normalizedMovies});
     } catch (error) {
         console.error('Error searching movies:', error);
         res.status(500).json({error: 'Internal server error'});
@@ -91,7 +100,17 @@ router.get('/movie/:imdbId', async (req, res) => {
       return res.status(404).json({ error: response.data.Error });
     }
 
-    res.json(response.data);
+    // Map OMDb API properties to lowercase for frontend consistency
+    const normalizedMovie = {
+      id: response.data.imdbID,
+      title: response.data.Title,
+      year: response.data.Year,
+      poster: response.data.Poster,
+      plot: response.data.Plot,
+      imdbID: response.data.imdbID
+    };
+
+    res.json(normalizedMovie);
   } catch (error) {
     console.error('Movie details error:', error);
     res.status(500).json({ error: 'Failed to get movie details' });
