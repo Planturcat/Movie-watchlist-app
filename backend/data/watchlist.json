@@ -1,0 +1,25 @@
+[
+  {
+    "id": "1",
+    "title": "Inception",
+    "year": "2010",
+    "imdbID": "tt1375666"
+  },
+  {
+    "id": "2",
+    "title": "The Dark Knight",
+    "year": "2008",
+    "imdbID": "tt0468569"
+  },
+  {
+    "id": "md0axom2fm9iofr1aqi",
+    "imdbID": "tt0372784",
+    "title": "Batman Begins",
+    "year": "2005",
+    "poster": "https://example.com/poster.jpg",
+    "plot": "After training with his mentor...",
+    "watched": false,
+    "rating": null,
+    "dateAdded": "2025-07-12T13:49:08.186Z"
+  }
+]
