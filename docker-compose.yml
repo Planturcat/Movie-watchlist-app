@@ -1,0 +1,38 @@
+version: '3.7'
+
+services:
+  backend:
+    build: ./backend
+    container_name: movie-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - OMDB_API_KEY=${OMDB_API_KEY}
+      - PORT=5000
+      - NODE_ENV=production
+    volumes:
+      - watchlist-data:/app/data
+    networks:
+      - movie-network
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: movie-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:5000/api
+    depends_on:
+      - backend
+    networks:
+      - movie-network
+    restart: unless-stopped
+
+volumes:
+  watchlist-data:
+    driver: local
+
+networks:
+  movie-network:
+    driver: bridge
